@@ -1,0 +1,5 @@
+Outros/
+.ipynb_checkpoints/
+__pycache__/
+.vscode/
+.env/
