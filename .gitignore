@@ -3,3 +3,4 @@ Outros/
 __pycache__/
 .vscode/
 .env/
+*.zip
