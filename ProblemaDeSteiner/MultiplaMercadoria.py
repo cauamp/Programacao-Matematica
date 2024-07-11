@@ -94,6 +94,8 @@ for (i, j) in E:
 # Resolver o modelo
 solver = SolverFactory('glpk')
 solver.options['tmlim'] = 30 * 60
+solver.options['nopresol'] = ''  # Desativa o pré-processamento
+
 resultado = solver.solve(modelo, tee=True)
 
 # Imprimir a solução
