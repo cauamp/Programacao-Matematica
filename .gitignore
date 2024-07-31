@@ -4,4 +4,7 @@ __pycache__/
 .vscode/
 .env/
 *.zip
+*.csv
+*.pdf
+*.txt
 ProblemaDeSteiner/logs
