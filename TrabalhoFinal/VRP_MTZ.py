@@ -2,8 +2,13 @@ import math
 from utils.vrp_utils import print_routes, plot_routes
 from pyomo.environ import ConcreteModel, Var, Objective, NonNegativeReals, Boolean, minimize, ConstraintList, SolverFactory, Binary
 import numpy as np  
-import networkx as nx
 import time 
+import argparse
+
+# Configurar o Argument Parser
+parser = argparse.ArgumentParser(description='Resolução do VRP e plotagem das rotas.')
+parser.add_argument('--path', type=str, required=False, help='Caminho para salvar a imagem das rotas.')
+args = parser.parse_args()
 
 # Dados de entrada
 V = {}  # Conjunto de pontos de visita
@@ -42,6 +47,9 @@ model.y = Var(V.keys(), K, within=Binary, initialize=0)
 # Variável auxiliar para o tempo máximo de viagem
 model.max_time = Var(within=NonNegativeReals, initialize=0)
 
+# Variáveis auxiliares para eliminação de subcircuitos (MTZ)
+model.u = Var(V.keys(), within=NonNegativeReals, bounds=(0, n-1))
+
 # Função objetivo: minimizar o tempo máximo de cobertura de todos os pontos
 model.obj = Objective(expr=model.max_time, sense=minimize)
 
@@ -55,7 +63,7 @@ for i in V:
         model.cnst.add(sum(model.x[i, j, k] for j in V if i != j for k in K) == len(K))
         model.cnst.add(sum(model.x[j, i, k] for j in V if i != j for k in K) == len(K))
     else:
-        #Se um veiculo chega no ponto i, ele deve sair do ponto i
+        # Se um veículo chega no ponto i, ele deve sair do ponto i
         model.cnst.add(sum(model.x[i, j, k] for j in V if i != j for k in K) == 1)
         model.cnst.add(sum(model.x[j, i, k] for j in V if i != j for k in K) == 1)
     for k in K:
@@ -63,75 +71,51 @@ for i in V:
         model.cnst.add(sum(model.x[i, j, k] for j in V if i != j) == model.y[i, k])
         model.cnst.add(sum(model.x[j, i, k] for j in V if i != j) == model.y[i, k])
 
-
-# Tempo de viagem não pode exceder a capacidade maxima do veículo e o tempo maximo 
+# Tempo de viagem não pode exceder a capacidade máxima do veículo e o tempo máximo 
 for k in K:
     model.cnst.add(sum(d[i, j] * model.x[i, j, k] for i in V for j in V if i != j) <= K[k]['c'])
     model.cnst.add(sum(d[i, j] * model.x[i, j, k] / K[k]['s'] for i in V for j in V if i != j) <= model.max_time)
-            
 
-model.subtour_elimination = ConstraintList()
-# Eliminação de subcircuito
-def find_arcs(model, V, K):
-    arcs = []
-    for i in V:
+# Restrições MTZ para eliminação de subcircuitos
+for i in V:
+    if i != 0:
         for j in V:
-            if i != j:
+            if i != j and j != 0:
                 for k in K:
-                    if np.isclose(model.x[i, j, k].value, 1):
-                        arcs.append((i, j))
-    return arcs
+                    model.cnst.add(model.u[j] >=  model.u[i] + (n-1) * model.x[i, j, k] + (n-3) * model.x[j, i, k]  - (n - 2))
 
-def find_subtours(arcs):
-    G = nx.DiGraph(arcs)
-    subtours = list(nx.strongly_connected_components(G))
-    return subtours
+# Restrições de fortalecimento para MTZ
+for i in V:
+    if i != 0:
+        model.cnst.add(model.u[i] >= 1)
+        model.cnst.add(model.u[i] <= n-1)
 
-def eliminate_subtours(model, subtours, V, K):
-    proceed = False
-    for S in subtours:
-        if 0 not in S:
-            proceed = True
-            Sout = {i for i in V if i not in S}
-            for h in S:
-                for k in K:
-                    model.subtour_elimination.add(
-                      model.y[h, k] <= sum(model.x[i, j, k] for i in S for j in Sout)
-                    )
-    return proceed
-
-def solve_step(model, solver, V, K):
-    sol = solver.solve(model, tee=True)
-    arcs = find_arcs(model, V, K)
-    subtours = find_subtours(arcs)
-    time.sleep(0.1)
-    proceed = eliminate_subtours(model, subtours, V, K)
-    return sol, proceed 
-
-def solve(model, solver, V, K):
-    proceed = True
-    while proceed:
-        sol, proceed = solve_step(model, solver, V, K)
-    return sol
+# Restrições para o depósito
+model.cnst.add(model.u[0] == 0)
 
 # Resolver o modelo
 solver = SolverFactory('glpk')
 solver.options['tmlim'] = 30 * 60
-results = solve(model, solver, V, K)
+results = solver.solve(model, tee=True)
 
-if (results.solver.status == 'ok') and (results.solver.termination_condition == 'optimal'):
+# Verificar se a solução foi encontrada
+if results.solver.status == 'ok':
     print("\nResumo da Execucao:")
-    #print(f'{results}\n--------------------------------------')
-    print("\nSolucao Otima Encontrada")
-    print('-------------------------------------')
+    print(f'{results}\n--------------------------------------')
+    if results.solver.termination_condition == 'optimal':
+        print("\nSolução Otima Encontrada")
+        print('-------------------------------------')
     # Extraindo informações do resultado
-    print(f"Tempo para corbertura total: {model.obj():.2f} segundos")
+    print(f"Tempo para cobertura total: {model.obj():.2f} segundos")
     for i in range(v):
-        print(f"Veículo {i} Tempo Máximo de Voo {K[i]['b']/60:.2f} horas | Velocidade {K[i]['s']:.2f} m/s | Capacidade de corbetura {K[i]['c']/1000:.2f} km")
+        print(f"Veículo {i} Tempo Maximo de Voo {K[i]['b']/60:.2f} horas | Velocidade {K[i]['s']:.2f} m/s | Capacidade de cobertura {K[i]['c']/1000:.2f} km")
     print('-------------------------------------')
 
     # Imprimir as rotas de cada veículo
     print_routes(model, K, V, d)
-    plot_routes(model, K, V, d)
+    if args.path:
+        plot_routes(model, K, V, d, save=True, path=args.path)
+    else:
+        plot_routes(model, K, V, d)
 else:
-    print("Nenhuma solução viável encontrada.")
+    print("Nenhuma solução viavel encontrada.")

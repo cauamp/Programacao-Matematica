@@ -5,6 +5,7 @@ __pycache__/
 .env/
 *.zip
 *.csv
-*.pdf
+logs/
 *.txt
 ProblemaDeSteiner/logs
+backup/

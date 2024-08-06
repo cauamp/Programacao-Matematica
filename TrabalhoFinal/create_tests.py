@@ -15,46 +15,59 @@ def calculate_average_distance(vertices):
     return total_distance / num_pairs if num_pairs > 0 else 0
 
 def generate_vrp_instance(num_vertices, num_vehicles):
-    instance = []
     vertices = []
     
-    # Add number of vertices and vehicles to the instance
-    instance.append(f"{num_vertices} {num_vehicles}")
-    
-    # Generate vertices
+    # Gerar vértices
     for i in range(num_vertices):
         x = random.randint(-10000, 10000)
         y = random.randint(-10000, 10000)
         vertices.append((x, y))
-        instance.append(f"{x} {y}")
     
-    # Calculate average distance between vertices
+    # Calcular a distância média entre os vértices
     avg_distance = calculate_average_distance(vertices)
     
-    # Generate vehicle parameters
-    for i in range(num_vehicles):
-        # To ensure that the coverage capacity is close to the average distance,
-        # we adjust battery and speed such that battery * speed is close to avg_distance.
-        speed = random.uniform(5, 15)
-        battery = (avg_distance / speed)/num_vehicles-1
-        instance.append(f"{battery:.2f} {speed:.2f}")
+    def create_instance(num_vertices, num_vehicles, difficulty_factor):
+        instance = []
+        
+        # Adicionar número de vértices e veículos à instância
+        instance.append(f"{num_vertices} {num_vehicles}")
+        
+        # Adicionar vértices à instância
+        for x, y in vertices:
+            instance.append(f"{x} {y}")
+        
+        # Gerar parâmetros dos veículos
+        for i in range(num_vehicles):
+            speed = random.uniform(5, 15) * difficulty_factor
+            battery = (avg_distance / speed) / (num_vehicles - 1) * difficulty_factor
+            instance.append(f"{battery:.2f} {speed:.2f}")
+        
+        return instance
+
+    # Instância fácil
+    easy_instance = create_instance(num_vertices, num_vehicles, difficulty_factor=1.0)
     
-    return instance
+    # Instância difícil (menos veículos e/ou menor bateria/velocidade)
+    difficult_instance = create_instance(num_vertices, max(2, num_vehicles - 1), difficulty_factor=0.5)
+    
+    return easy_instance, difficult_instance
 
 def write_instance_to_file(filename, instance):
     with open(filename, 'w') as f:
         for line in instance:
             f.write(line + "\n")
 
-num_instances = 10
-max_vertices = 20
+num_instances = 20
+max_vertices = 15
 
 # Criar diretório .tests se não existir
 os.makedirs('./tests', exist_ok=True)
 
 for idx in range(num_instances):
-    num_vertices = random.randint(2, max_vertices)  # Número de vértices entre 2 e 20
-    num_vehicles = random.randint(1, 5)  # Número de veículos entre 1 e 5
-    instance = generate_vrp_instance(num_vertices, num_vehicles)
-    filename = f'./tests/{idx + 1}.txt'
-    write_instance_to_file(filename, instance)
+    num_vertices = random.randint(3, max_vertices)  # Número de vértices 
+    num_vehicles = random.randint(2, min(num_vertices-1, 5))  # Número de veículos
+    instance0, instance1 = generate_vrp_instance(num_vertices, num_vehicles)
+    filename = f'./tests/{idx + 1}_1.txt'
+    write_instance_to_file(filename, instance0)
+    filename = f'./tests/{idx + 1}_2.txt'
+    write_instance_to_file(filename, instance1)
